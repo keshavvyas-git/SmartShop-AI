@@ -4,7 +4,7 @@
 
 SmartShop AI is a responsive chat app featuring **Ani**, an AI shopping assistant. Describe what you want to buy, your budget, and what matters to you. Ani researches relevant options, explains the trade-offs, and recommends a suitable choice in plain language.
 
-> **Live demo:** [Open the public `onrender.com` URL shown on the `smartshop-ai` service page in Render.](https://smartshop-ai-995v.onrender.com)
+> **Live demo:** [SmartShop-AI](https://smartshop-ai-995v.onrender.com)
 
 ## Features
 
