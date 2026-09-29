@@ -291,8 +291,8 @@
 
 .messages {
   display: grid;
-  width: min(760px, 100%);
-  gap: 18px;
+  width: min(900px, 100%);
+  gap: 22px;
   margin: 0 auto;
   padding: 30px 0 24px;
 }
@@ -303,6 +303,8 @@
 
 .message {
   display: flex;
+  min-width: 0;
+  align-items: flex-start;
   gap: 10px;
   animation: fade-up 280ms ease both;
 }
@@ -312,7 +314,8 @@
 }
 
 .bubble {
-  max-width: min(82%, 630px);
+  min-width: 0;
+  max-width: min(84%, 660px);
   padding: 11px 14px;
   border-radius: 14px;
   font-size: 12px;
@@ -327,10 +330,16 @@
 }
 
 .assistant .bubble {
-  border-top-left-radius: 4px;
+  width: 100%;
+  max-width: none;
+  flex: 1 1 0;
+  padding: clamp(16px, 2.5vw, 24px);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  border-top-left-radius: 7px;
   background: var(--surface-assistant);
   color: var(--text-soft);
-  box-shadow: 0 8px 26px rgb(40 45 33 / 5%);
+  box-shadow: var(--shadow);
 }
 
 .message-avatar {
@@ -343,13 +352,15 @@
   background: var(--accent-soft);
   color: var(--accent);
   font-size: 12px;
+  margin-top: 3px;
 }
 
 .answer-content {
-  width: min(100%, 680px);
+  width: 100%;
+  max-width: 820px;
   color: var(--text-soft);
-  font-size: 13px;
-  line-height: 1.75;
+  font-size: 14px;
+  line-height: 1.72;
 }
 
 .answer-content p {
@@ -508,6 +519,7 @@
   color: var(--accent-strong);
   text-decoration-color: #ddc46f;
   text-underline-offset: 2px;
+  overflow-wrap: anywhere;
 }
 
 .answer-content a:hover {
@@ -526,7 +538,11 @@
 }
 
 @media (max-width: 560px) {
-  .answer-content { font-size: 12px; }
+  .messages { gap: 16px; }
+  .message { gap: 8px; }
+  .assistant .bubble { padding: 15px 13px; border-radius: 15px; }
+  .answer-content { font-size: 13px; }
+  .answer-content > p:first-child { font-size: 15px; }
   .product-shortlist { grid-template-columns: 1fr; gap: 8px; }
   .product-card { padding: 13px; }
 }

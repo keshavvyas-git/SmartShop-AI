@@ -47,6 +47,7 @@
   function renderMarkdown(markdown) {
     const html = [];
     let listType = null;
+    let paragraphLines = [];
     const lines = markdown.split(/\r?\n/);
 
     function splitTableRow(line) {
@@ -76,17 +77,33 @@
       listType = null;
     }
 
+    function flushParagraph() {
+      if (!paragraphLines.length) return;
+      const paragraph = paragraphLines.join(' ').trim();
+      paragraphLines = [];
+
+      if (/^\*\*(recommendation|final recommendation|our pick):?\*\*/i.test(paragraph)) {
+        html.push(`<aside class="recommendation-card">${renderInlineMarkdown(paragraph)}</aside>`);
+      } else if (/^\*\*(in simple terms|plain english):?\*\*/i.test(paragraph)) {
+        html.push(`<aside class="plain-explanation">${renderInlineMarkdown(paragraph)}</aside>`);
+      } else {
+        html.push(`<p>${renderInlineMarkdown(paragraph)}</p>`);
+      }
+    }
+
     for (let index = 0; index < lines.length; index += 1) {
       const rawLine = lines[index];
       const line = rawLine.trim();
       if (!line) {
         closeList();
+        flushParagraph();
         continue;
       }
 
       // Turn comparison tables into readable product cards, including tables
       // emitted with escaped pipes by some model responses.
       if (line.includes('|') && index + 1 < lines.length && isTableDivider(lines[index + 1].trim())) {
+        flushParagraph();
         closeList();
         const headers = splitTableRow(line);
         const rows = [];
@@ -105,6 +122,7 @@
       const orderedItem = line.match(/^\d+[.)]\s+(.+)$/);
 
       if (heading) {
+        flushParagraph();
         closeList();
         const level = heading[1].length === 1 ? 2 : 3;
         html.push(`<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`);
@@ -112,6 +130,7 @@
       }
 
       if (unorderedItem || orderedItem) {
+        flushParagraph();
         const nextListType = unorderedItem ? 'ul' : 'ol';
         if (listType !== nextListType) {
           closeList();
@@ -124,16 +143,11 @@
       }
 
       closeList();
-      if (/^\*\*(recommendation|final recommendation|our pick)\*\*/i.test(line)) {
-        html.push(`<aside class="recommendation-card">${renderInlineMarkdown(line)}</aside>`);
-      } else if (/^\*\*(in simple terms|plain english):?\*\*/i.test(line)) {
-        html.push(`<aside class="plain-explanation">${renderInlineMarkdown(line)}</aside>`);
-      } else {
-        html.push(`<p>${renderInlineMarkdown(line)}</p>`);
-      }
+      paragraphLines.push(line);
     }
 
     closeList();
+    flushParagraph();
     return html.join('');
   }
 
