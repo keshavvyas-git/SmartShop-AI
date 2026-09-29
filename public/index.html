@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f7f5f0" />
+    <meta
+      name="description"
+      content="Ani helps you compare products and find the right one for your budget and needs."
+    />
+    <title>SmartShop AI — thoughtful shopping with Ani</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/css/base.css" />
+    <link rel="stylesheet" href="/css/chat.css" />
+    <link rel="stylesheet" href="/css/theme.css" />
+    <script src="/js/app.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <main class="main-area" id="home">
+        <header class="topbar">
+          <div class="topbar-left">
+            <a class="topbar-brand" id="assistantNav" href="#home" aria-label="SmartShop home">
+              <span class="brand-mark" aria-hidden="true">
+                <svg viewBox="0 0 32 32">
+                  <path d="M7 11h18l-1.6 15H8.6L7 11Z" />
+                  <path d="M12 12V8a4 4 0 0 1 8 0v4" />
+                  <path d="m13.2 18 2 2 4-4" />
+                </svg>
+              </span>
+              <span>SmartShop<span class="brand-suffix">.ai</span></span>
+            </a>
+            <div class="breadcrumb" aria-label="Current page">
+              <span>Your shopping space</span>
+              <span aria-hidden="true">·</span>
+              <strong>New conversation</strong>
+            </div>
+          </div>
+          <div class="top-actions">
+            <span class="research-status"><span aria-hidden="true"></span> Live product research</span>
+            <button
+              class="theme-icon-button"
+              id="themeToggle"
+              type="button"
+              aria-label="Switch to dark mode"
+              title="Switch to dark mode"
+            >
+              <span class="theme-icon" aria-hidden="true">☾</span>
+            </button>
+          </div>
+        </header>
+
+        <section class="conversation" id="conversation" aria-live="polite">
+          <div class="welcome" id="welcome">
+            <div class="welcome-orbit" aria-hidden="true">
+              <div class="orbit-ring ring-a"></div>
+              <div class="orbit-ring ring-b"></div>
+              <div class="ani-face">
+                <div class="ani-glint">✦</div>
+                <div class="ani-eyes"><i></i><i></i></div>
+                <div class="ani-smile"></div>
+              </div>
+              <span class="float-star star-a">✳</span>
+              <span class="float-star star-b">✧</span>
+              <span class="float-dot dot-a"></span>
+              <span class="float-dot dot-b"></span>
+            </div>
+
+            <div class="eyebrow"><span class="eyebrow-dot"></span> YOUR THOUGHTFUL SHOPPING SIDEKICK</div>
+            <h1>Hey, I’m Ani<span>!</span><br /><em>Let’s find your just right.</em></h1>
+            <p class="welcome-copy">
+              Tell me what you’re shopping for and what matters most.
+              I’ll research the options and make the tradeoffs easy to understand.
+            </p>
+
+            <div class="suggestion-label">WHAT ARE YOU SHOPPING FOR?</div>
+            <div class="suggestion-grid">
+              <button
+                class="suggestion"
+                type="button"
+                data-prompt="Help me plan a desktop PC build. Ask me my budget and what I’ll use it for before recommending parts."
+              >
+                <span class="suggestion-icon lavender" aria-hidden="true">▱</span>
+                <span><strong>Help me build a PC</strong><small>Parts matched to my needs</small></span>
+                <span class="suggestion-arrow" aria-hidden="true">↗</span>
+              </button>
+              <button
+                class="suggestion"
+                type="button"
+                data-prompt="I want a laptop for coding under ₹30,000 in India. Please focus on the best practical options for programming."
+              >
+                <span class="suggestion-icon peach" aria-hidden="true">⌘</span>
+                <span><strong>Laptop for coding</strong><small>Under ₹30,000</small></span>
+                <span class="suggestion-arrow" aria-hidden="true">↗</span>
+              </button>
+              <button
+                class="suggestion"
+                type="button"
+                data-prompt="I want to buy a phone for vlogging. Find phones with the best camera for my budget, and ask me my budget first."
+              >
+                <span class="suggestion-icon yellow" aria-hidden="true">▣</span>
+                <span><strong>Phone for vlogging</strong><small>Camera-first recommendations</small></span>
+                <span class="suggestion-arrow" aria-hidden="true">↗</span>
+              </button>
+              <button
+                class="suggestion"
+                type="button"
+                data-prompt="I’m looking for a gaming laptop for GTA VI in India. Tell me the minimum specs to target and recommend suitable options."
+              >
+                <span class="suggestion-icon mint" aria-hidden="true">◈</span>
+                <span><strong>Gaming laptop for GTA VI</strong><small>Specs and suitable options</small></span>
+                <span class="suggestion-arrow" aria-hidden="true">↗</span>
+              </button>
+            </div>
+            <div class="trust-note"><span aria-hidden="true">✳</span> Crafted with ♥ by Anish Tamboli</div>
+          </div>
+
+          <div class="messages" id="messages"></div>
+        </section>
+
+        <footer class="composer-wrap">
+          <form class="composer" id="chatForm">
+            <label class="visually-hidden" for="chatInput">Message Ani</label>
+            <textarea
+              id="chatInput"
+              rows="1"
+              maxlength="1400"
+              placeholder="Tell Ani what you’re shopping for…"
+              autocomplete="off"
+            ></textarea>
+            <button class="send-btn" id="sendButton" type="submit" aria-label="Send message" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 19V5m-6 6 6-6 6 6" />
+              </svg>
+            </button>
+          </form>
+          <div class="composer-foot">
+            <span><span class="tiny-spark" aria-hidden="true">✳</span> Pick a suggestion to edit it before sending</span>
+            <span>CHECK PRICES AND AVAILABILITY BEFORE YOU BUY</span>
+          </div>
+        </footer>
+      </main>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

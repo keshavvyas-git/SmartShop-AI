@@ -1,0 +1,14 @@
+{
+  "name": "smartshop-ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "An AI shopping assistant with live product research.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check server.js && node --check src/groq.js && node --check public/js/app.js"
+  },
+  "engines": {
+    "node": ">=20.12.0"
+  }
+}
