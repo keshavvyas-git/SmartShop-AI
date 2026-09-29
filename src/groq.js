@@ -10,7 +10,7 @@ Keep each reply concise (aim for 140 words, excluding source links and table hea
 
 Use trusted sources only: manufacturer product/specification and warranty pages; official government or standards sources; established, reputable independent product-testing publications; and direct listings from well-known authorized retailers for current prices/availability. Verify that each source matches the exact model/variant and country. Do not rely on search snippets alone. Do not cite forums, social posts, anonymous reviews, scraped comparison/affiliate blogs, unknown shops, or unverified marketplace sellers. If a claim cannot be verified through a trusted source, omit it. Link the source inline with Markdown close to the claim; never invent URLs or use opaque citation markers. If trusted sources do not support a reliable price or three distinct choices, say that plainly and provide fewer well-supported options rather than guessing.
 
-When you have enough details, shortlist up to three products (exactly three only when all three are adequately supported). For each, give the exact product name/variant, approximate current price and currency when verified, one reason it fits, and one tradeoff. End with one clear recommendation that follows the shopper's priorities. Immediately after the recommendation, add a short paragraph headed **In simple terms**: explain in everyday words why that product suits this person's use, using a familiar analogy only when it genuinely helps. Avoid jargon, unexplained specs, and talking down to the user. Keep answers focused on the shopping request. Use brief headings and bullets or a compact Markdown comparison table. Do not emit raw HTML or JSON.`;
+When you have enough details, shortlist up to three products (exactly three only when all three are adequately supported). Keep the response compact: one short Markdown comparison table with columns Product, Approx. price, Why it fits, and Main trade-off; one row per product, with short cells. Do not create a separate multi-paragraph subsection for each product. Follow the table with one concise **Recommendation** sentence, then one short paragraph headed **In simple terms** explaining why that choice suits the shopper in everyday language. Avoid jargon, unexplained specs, and talking down to the user. Keep answers focused on the shopping request. Do not emit raw HTML or JSON.`;
 
 class ApiError extends Error {
   constructor(status, message) {
@@ -54,6 +54,39 @@ function getUpstreamError(status, message) {
   return new ApiError(502, 'Ani could not reach Groq just now. Please try again in a moment.');
 }
 
+function collectSearchSources(message) {
+  const executedTools = Array.isArray(message.executed_tools) ? message.executed_tools : [];
+  const sources = [];
+  const seenUrls = new Set();
+
+  for (const tool of executedTools) {
+    const results = tool?.search_results?.results;
+    if (!Array.isArray(results)) continue;
+
+    for (const result of results) {
+      if (typeof result?.url !== 'string' || typeof result?.title !== 'string') continue;
+
+      let sourceUrl;
+      try {
+        sourceUrl = new URL(result.url);
+      } catch {
+        continue;
+      }
+      if (sourceUrl.protocol !== 'https:' || seenUrls.has(sourceUrl.href)) continue;
+
+      seenUrls.add(sourceUrl.href);
+      sources.push({
+        id: String(sources.length + 1),
+        title: result.title.trim().slice(0, 180),
+        url: sourceUrl.href,
+      });
+      if (sources.length >= 30) return sources;
+    }
+  }
+
+  return sources;
+}
+
 async function requestGroq(messages, { apiKey, model, maxCompletionTokens }) {
   const body = {
     model,
@@ -88,8 +121,11 @@ async function requestGroq(messages, { apiKey, model, maxCompletionTokens }) {
 
     const result = await response.json().catch(() => ({}));
     if (response.ok) {
-      const answer = result.choices?.[0]?.message?.content;
-      if (typeof answer === 'string' && answer.trim()) return answer.trim();
+      const message = result.choices?.[0]?.message;
+      const answer = message?.content;
+      if (typeof answer === 'string' && answer.trim()) {
+        return { answer: answer.trim(), sources: collectSearchSources(message) };
+      }
       throw new ApiError(502, 'Ani did not receive a usable answer. Please try again.');
     }
 

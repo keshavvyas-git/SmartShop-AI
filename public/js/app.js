@@ -30,7 +30,7 @@
     })[character]);
   }
 
-  function renderInlineMarkdown(value) {
+  function renderInlineMarkdown(value, sourcesById = new Map()) {
     let html = escapeHtml(value);
 
     html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_, label, url) => {
@@ -38,14 +38,24 @@
       return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${label}</a>`;
     });
 
+    html = html.replace(/[【〖](\d+)(?:†L[\d-]+)?[】〗]/g, (citation, id) => {
+      const source = sourcesById.get(id);
+      if (!source) return `<span class="source-reference" title="Source ${id}">${id}</span>`;
+      return `<a class="source-reference" href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(source.title)}" aria-label="Open source ${id}: ${escapeHtml(source.title)}">${id}</a>`;
+    });
+
+    html = html.replace(/\\([^\w\s])/g, '$1');
+
     return html
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
       .replace(/\*(.+?)\*/g, '<em>$1</em>')
       .replace(/`([^`]+)`/g, '<code>$1</code>');
   }
 
-  function renderMarkdown(markdown) {
+  function renderMarkdown(markdown, sources = []) {
     const html = [];
+    const sourcesById = new Map(sources.map((source) => [String(source.id), source]));
+    const inline = (value) => renderInlineMarkdown(value, sourcesById);
     let listType = null;
     let paragraphLines = [];
     const lines = markdown.split(/\r?\n/);
@@ -63,10 +73,10 @@
     function renderTable(headers, rows) {
       const products = rows.map((row) => {
         const cells = headers.map((_, index) => row[index] || '—');
-        const title = renderInlineMarkdown(cells[0] || 'Product');
-        const price = cells[1] ? renderInlineMarkdown(cells[1]) : '';
+        const title = inline(cells[0] || 'Product');
+        const price = cells[1] ? inline(cells[1]) : '';
         const details = headers.slice(2).map((header, index) => `
-          <div class="product-detail"><span>${renderInlineMarkdown(header)}</span><p>${renderInlineMarkdown(cells[index + 2] || '—')}</p></div>`).join('');
+          <div class="product-detail"><span>${inline(header)}</span><p>${inline(cells[index + 2] || '—')}</p></div>`).join('');
         return `<article class="product-card"><div class="product-card-heading"><h3>${title}</h3>${price ? `<span class="product-price">${price}</span>` : ''}</div>${details ? `<div class="product-details">${details}</div>` : ''}</article>`;
       }).join('');
       return `<section class="product-shortlist" aria-label="Product shortlist">${products}</section>`;
@@ -83,11 +93,11 @@
       paragraphLines = [];
 
       if (/^\*\*(recommendation|final recommendation|our pick):?\*\*/i.test(paragraph)) {
-        html.push(`<aside class="recommendation-card">${renderInlineMarkdown(paragraph)}</aside>`);
+        html.push(`<aside class="recommendation-card">${inline(paragraph)}</aside>`);
       } else if (/^\*\*(in simple terms|plain english):?\*\*/i.test(paragraph)) {
-        html.push(`<aside class="plain-explanation">${renderInlineMarkdown(paragraph)}</aside>`);
+        html.push(`<aside class="plain-explanation">${inline(paragraph)}</aside>`);
       } else {
-        html.push(`<p>${renderInlineMarkdown(paragraph)}</p>`);
+        html.push(`<p>${inline(paragraph)}</p>`);
       }
     }
 
@@ -125,7 +135,7 @@
         flushParagraph();
         closeList();
         const level = heading[1].length === 1 ? 2 : 3;
-        html.push(`<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`);
+        html.push(`<h${level}>${inline(heading[2])}</h${level}>`);
         continue;
       }
 
@@ -138,7 +148,7 @@
           html.push(`<${listType}>`);
         }
         const content = (unorderedItem || orderedItem)[1];
-        html.push(`<li>${renderInlineMarkdown(content)}</li>`);
+        html.push(`<li>${inline(content)}</li>`);
         continue;
       }
 
@@ -148,7 +158,149 @@
 
     closeList();
     flushParagraph();
-    return html.join('');
+    return formatProductSections(html.join(''));
+  }
+
+  function fieldTypeFromLabel(value) {
+    const label = value.replace(/[\\*:]/g, '').trim().toLowerCase();
+    if (/^(?:approx(?:imate)?\.?\s*)?price$/.test(label)) return 'price';
+    if (/^(?:why it fits|why it works|good for|best for)/.test(label)) return 'fit';
+    if (/^(?:main\s+)?trade[- ]?off|^(?:watch out|downside)/.test(label)) return 'tradeoff';
+    return null;
+  }
+
+  function standaloneStrongText(node) {
+    if (node.nodeType !== Node.ELEMENT_NODE || node.tagName !== 'P') return null;
+    const strong = node.firstElementChild;
+    if (!strong || strong.tagName !== 'STRONG' || node.children.length !== 1) return null;
+    return strong.textContent.trim();
+  }
+
+  function isProductBoundary(node) {
+    if (node.nodeType !== Node.ELEMENT_NODE) return false;
+    if (node.matches('aside.recommendation-card, aside.plain-explanation')) return true;
+    const text = node.textContent.trim();
+    const strongText = standaloneStrongText(node) || '';
+    return /^(?:prices?\s+(?:may|can|are)|\*?prices?\b)/i.test(text)
+      || /^(?:recommendation|final recommendation|our pick|in simple terms|plain english)\b/i.test(strongText);
+  }
+
+  function isProductSection(nodes) {
+    const labels = nodes.map(standaloneStrongText).filter(Boolean);
+    const hasPrice = labels.some((label) => fieldTypeFromLabel(label) === 'price');
+    const hasFit = labels.some((label) => fieldTypeFromLabel(label) === 'fit');
+    const hasTradeoff = labels.some((label) => fieldTypeFromLabel(label) === 'tradeoff');
+    return hasPrice && (hasFit || hasTradeoff) || hasFit && hasTradeoff;
+  }
+
+  function renderProductSection(titleNode, bodyNodes) {
+    let subtitle = '';
+    let price = '';
+    const details = [];
+    const extras = [];
+
+    for (let index = 0; index < bodyNodes.length; index += 1) {
+      const node = bodyNodes[index];
+      const strongText = standaloneStrongText(node);
+      const fieldType = strongText ? fieldTypeFromLabel(strongText) : null;
+
+      if (fieldType) {
+        let valueNode = bodyNodes[index + 1];
+        while (valueNode?.nodeType === Node.TEXT_NODE && !valueNode.textContent.trim()) {
+          index += 1;
+          valueNode = bodyNodes[index + 1];
+        }
+        const value = valueNode?.nodeType === Node.ELEMENT_NODE && valueNode.tagName === 'P'
+          && !standaloneStrongText(valueNode)
+          ? valueNode.innerHTML
+          : '';
+        if (value) index += 1;
+
+        if (fieldType === 'price') price = value;
+        else details.push({
+          label: fieldType === 'fit' ? 'Why it fits' : 'Main trade-off',
+          value,
+        });
+        continue;
+      }
+
+      if (!subtitle && strongText) {
+        subtitle = node.innerHTML;
+      } else {
+        const markup = node.outerHTML || escapeHtml(node.textContent);
+        if (markup.trim()) extras.push(markup);
+      }
+    }
+
+    const detailMarkup = details.map(({ label, value }) => `
+      <div class="product-detail"><span>${label}</span><p>${value}</p></div>`).join('');
+    const subtitleMarkup = subtitle ? `<p class="product-specs">${subtitle}</p>` : '';
+    const priceMarkup = price
+      ? `<div class="product-price-wrap"><span>Approx. price</span><strong class="product-price">${price}</strong></div>`
+      : '';
+
+    return `<article class="product-card product-result-card">
+      <div class="product-card-heading"><h3>${titleNode.innerHTML}</h3></div>
+      ${subtitleMarkup}${priceMarkup}${detailMarkup ? `<div class="product-details">${detailMarkup}</div>` : ''}${extras.join('')}
+    </article>`;
+  }
+
+  function formatProductSections(markup) {
+    const parsed = document.createElement('div');
+    parsed.innerHTML = markup;
+    const nodes = Array.from(parsed.childNodes);
+    const output = document.createElement('div');
+    let productCards = [];
+
+    function flushProductCards() {
+      if (!productCards.length) return;
+      const section = document.createElement('section');
+      section.className = 'product-shortlist';
+      section.setAttribute('aria-label', 'Product shortlist');
+      section.innerHTML = productCards.join('');
+      output.append(section);
+      productCards = [];
+    }
+
+    function appendNode(node) {
+      flushProductCards();
+      if (node.nodeType === Node.TEXT_NODE && !node.textContent.trim()) return;
+      output.append(node.cloneNode(true));
+    }
+
+    for (let index = 0; index < nodes.length;) {
+      const node = nodes[index];
+      if (node.nodeType !== Node.ELEMENT_NODE || node.tagName !== 'H3') {
+        appendNode(node);
+        index += 1;
+        continue;
+      }
+
+      let end = index + 1;
+      while (end < nodes.length) {
+        const next = nodes[end];
+        if (next.nodeType === Node.ELEMENT_NODE
+          && (next.tagName === 'H3' || isProductBoundary(next))) break;
+        end += 1;
+      }
+      const bodyNodes = nodes.slice(index + 1, end);
+
+      if (isProductSection(bodyNodes)) {
+        productCards.push(renderProductSection(node, bodyNodes));
+      } else {
+        flushProductCards();
+        output.append(node.cloneNode(true));
+        bodyNodes.forEach((bodyNode) => {
+          if (!(bodyNode.nodeType === Node.TEXT_NODE && !bodyNode.textContent.trim())) {
+            output.append(bodyNode.cloneNode(true));
+          }
+        });
+      }
+      index = end;
+    }
+
+    flushProductCards();
+    return output.innerHTML;
   }
 
   function showToast(message) {
@@ -241,7 +393,7 @@
       }
 
       const answer = result.answer.trim();
-      assistantMessage.querySelector('.answer-content').innerHTML = renderMarkdown(answer);
+      assistantMessage.querySelector('.answer-content').innerHTML = renderMarkdown(answer, result.sources || []);
       state.history.push({ role: 'assistant', content: answer });
     } catch (error) {
       const answer = assistantMessage.querySelector('.answer-content');

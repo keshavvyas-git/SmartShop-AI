@@ -154,8 +154,8 @@ async function handleChat(request, response) {
 
   try {
     const payload = await readJsonBody(request);
-    const answer = await getAssistantReply(payload.messages);
-    sendJson(response, 200, { answer });
+    const result = await getAssistantReply(payload.messages);
+    sendJson(response, 200, result);
   } catch (error) {
     sendError(response, error);
   }
