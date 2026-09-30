@@ -1,14 +1,11 @@
 services:
   - type: web
     name: smartshop-ai
-    runtime: node
+    runtime: python
     plan: free
-    buildCommand: npm install
-    startCommand: npm start
-    healthCheckPath: /health
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run streamlit_app.py --server.address 0.0.0.0 --server.port $PORT
     envVars:
-      - key: NODE_ENV
-        value: production
       - key: GROQ_API_KEY
         sync: false
       - key: GROQ_MODEL

@@ -1,179 +1,156 @@
 # SmartShop AI
 
-**A thoughtful shopping assistant that helps you compare products and choose with confidence.**
+SmartShop AI is a responsive, Streamlit shopping assistant featuring **Ani**. Describe what you want to buy, your budget, and what matters most. Ani researches current options, compares trade-offs, and gives a practical recommendation in everyday language.
 
-SmartShop AI is a responsive chat app featuring **Ani**, an AI shopping assistant. Describe what you want to buy, your budget, and what matters to you. Ani researches relevant options, explains the trade-offs, and recommends a suitable choice in plain language.
+**Live demo:** [SmartShop AI on Render](https://smartshop-ai-995v.onrender.com)
 
-> **Live demo:** [SmartShop-AI](https://smartshop-ai-995v.onrender.com)
+## What it does
 
-## Features
+- Researches shopping questions with Groq's browser search tool.
+- Uses India and INR as the default market.
+- Compares up to three products, then explains one recommendation in simple language.
+- Prefers trusted sources: manufacturers, established testing publications, government/standards sources, and well-known authorized retailers.
+- Keeps the API key on the server and out of the browser.
+- Offers editable prompt suggestions, per-session chat history, and light/dark themes.
+- Uses the original sunflower palette and animated Ani mascot, with a responsive layout.
 
-- Natural-language shopping requests, with India and INR as the default market.
-- Live product research through Groq's browser search tool.
-- Shortlists and comparisons that highlight fit, price, and trade-offs.
-- A clear recommendation followed by an easy-to-understand explanation.
-- Direct source links, with instructions to prefer official product information, reputable reviewers, and established retailers.
-- Editable suggestion prompts: selecting an idea fills the composer; it does not send the message.
-- Responsive chat interface, sunflower-inspired light and dark themes, and reduced-motion support.
-- Server-side API key handling, request limits, a health endpoint, and basic security headers.
+Prices and availability change. Follow the linked sources and confirm the exact model and current price before buying. Ani is an AI assistant; verify important details with the retailer or manufacturer.
 
-Product prices and availability can change. Always open the linked source and confirm the exact model and current price before buying. Ani is an AI assistant; verify important product details with the retailer or manufacturer.
-
-## Screenshots
-
-Screenshots make the project easier to understand at a glance. Recommended captures:
-
-| Suggested file | What to capture |
-| --- | --- |
-| `docs/screenshots/welcome-desktop.png` | Welcome screen with the four editable shopping prompts. |
-| `docs/screenshots/shortlist-desktop.png` | A product comparison, recommendation, and plain-language explanation. |
-| `docs/screenshots/shortlist-mobile.png` | The same answer at a phone-sized viewport to show the responsive layout. |
-| `docs/screenshots/dark-mode.png` | The chat and product cards in dark mode. |
-
-Save screenshots in `docs/screenshots/`, then embed them here with Markdown, for example:
-
-```markdown
-![SmartShop AI product shortlist on mobile](docs/screenshots/shortlist-mobile.png)
-```
-
-Before sharing screenshots publicly, remove personal information and make sure any displayed product claims and prices are clearly presented as examples.
-
-## How to use SmartShop
-
-1. Open the deployed app or start it locally using the setup steps below.
-2. Type what you want to buy. Include your budget, country, and the features or use case that matter most.
-3. You can select a suggestion to start a draft, then edit it before sending.
-4. Send the request with the send button or **Enter**. Use **Shift+Enter** for a new line.
-5. Review the comparison, source links, recommendation, and simple explanation. Check the linked source for current price and availability.
-6. Use the theme button in the top-right corner to switch between light and dark mode.
-
-Example request:
-
-> I need a laptop for coding in India for under ₹30,000. Prioritize a reliable keyboard and enough memory for everyday programming.
-
-## Technology
+## Tech stack
 
 | Area | Technology |
 | --- | --- |
-| Interface | HTML, CSS, and browser-native JavaScript |
-| Server | Node.js built-in HTTP server (no runtime package dependencies) |
-| AI | Groq Chat Completions API with `openai/gpt-oss-120b` by default |
-| Product research | Groq's built-in `browser_search` tool |
-| Hosting | Render web service configured with a Blueprint |
+| App and UI | Python, Streamlit |
+| Styling and animation | Streamlit theme plus responsive CSS and a small static HTML mascot |
+| AI | Groq Chat Completions API, `openai/gpt-oss-120b` by default |
+| Product research | Groq `browser_search` tool |
+| Hosting | Render web service managed through `render.yaml` |
 
 ### Request flow
 
-1. The browser sends the current chat history to the same-origin `/api/chat` endpoint.
-2. The Node server validates and limits the request, then calls Groq using the server-side `GROQ_API_KEY`.
-3. Ani returns a concise, shopping-focused answer. The browser formats Markdown comparisons into responsive product cards.
+1. Streamlit receives a chat message and keeps the conversation in that visitor's session state.
+2. The Python server sends the recent messages to Groq using `GROQ_API_KEY` from the server environment.
+3. Ani returns a concise comparison; Streamlit displays product cards, source links, the recommendation, and the plain-language explanation.
 
-The API key is never sent to the browser. The app does not have user accounts, a database, or persistent chat history; a conversation lives in the current page session.
+There are no user accounts or database. Chat history is kept only in the current Streamlit session.
 
 ## Run locally
 
 ### Requirements
 
-- Node.js **20.12 or newer**.
+- Python 3.10 or newer.
 - A Groq API key with access to the configured model and browser search.
 
-### Setup (PowerShell)
+### Windows PowerShell
 
 ```powershell
 git clone https://github.com/keshavvyas-git/SmartShop-AI.git
 cd SmartShop-AI
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-Open `.env` in a text editor and replace the placeholder with your key:
+Edit `.env` and set your key:
 
 ```dotenv
 GROQ_API_KEY=your_groq_api_key_here
 GROQ_MODEL=openai/gpt-oss-120b
 GROQ_MAX_COMPLETION_TOKENS=900
-PORT=3000
 ```
 
-Keep the real key private. `.env` is ignored by Git; never commit it or paste the key into source files, screenshots, or chat.
-
-Start the app:
+Then run:
 
 ```powershell
-npm.cmd start
+python -m streamlit run streamlit_app.py
 ```
 
-Open <http://localhost:3000>. To stop the server, press **Ctrl+C** in the terminal.
+Open the local URL shown in the terminal (usually <http://localhost:8501>). Stop the server with **Ctrl+C**. The `.env` file is ignored by Git; never commit your real key.
 
-The repository also includes a syntax-check command:
+You can also configure these values as environment variables or through Streamlit secrets. In deployment, use the host's secret settings rather than committing credentials.
 
-```powershell
-npm.cmd run check
+## Deploy on Streamlit Community Cloud
+
+The app entry point and `requirements.txt` are in the repository root, with Streamlit settings in `.streamlit/config.toml`. Community Cloud deploys from GitHub and installs packages listed in `requirements.txt`.
+
+1. Sign in at [Streamlit Community Cloud](https://share.streamlit.io/) and connect the GitHub account that can access this repository.
+2. Select **Create app**, then choose **Yup, I have an app**.
+3. Set the repository to `keshavvyas-git/SmartShop-AI`, branch to `streamlit-cloud`, and app file to `streamlit_app.py`.
+4. Open **Advanced settings** and add these values in the **Secrets** box, replacing the API key with your own:
+
+   ```toml
+   GROQ_API_KEY = "your_groq_api_key_here"
+   GROQ_MODEL = "openai/gpt-oss-120b"
+   GROQ_MAX_COMPLETION_TOKENS = "900"
+   ```
+
+5. Click **Deploy** and wait for the app to finish building. Choose Python 3.12 in Advanced settings if a version selector is shown.
+
+The Groq key is read from `st.secrets` on Community Cloud and from environment variables or local `.env` elsewhere. Do not put the real key in GitHub. Community Cloud may take a few minutes to build the first deployment. See Streamlit's [deployment guide](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/deploy) and [secrets guide](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/secrets-management).
+
+## Deploy on Render
+
+The root [`render.yaml`](render.yaml) configures the existing web service to use Python and start Streamlit. Render supports Python as a native Blueprint runtime; its Blueprint reads the build and start commands from this file.
+
+To move the existing Render service from Node to Streamlit:
+
+1. Commit and push the migration to the connected GitHub `main` branch.
+2. In Render, sync or review the Blueprint changes so the service runtime changes from Node to Python.
+3. Keep the existing `GROQ_API_KEY` secret in the service environment. The YAML marks it `sync: false` so the key is not stored in Git.
+4. Apply the Blueprint update and wait for the Python build and deployment to finish.
+5. Open the service URL and try a shopping request. Check the Render logs if the build or Groq request fails.
+
+Render deploys commits pushed to the connected branch when auto-deploy is enabled. Free web services may sleep while idle and take time to wake on a new visit. See [Render's free service limits](https://render.com/docs/free).
+
+## Project structure
+
+```text
+streamlit_app.py       Streamlit page, chat UI, suggestions, and session state
+smartshop/
+  groq_client.py       Groq API client, prompt, validation, and source extraction
+assets/
+  smartshop.css        Responsive sunflower theme and Ani animation
+.streamlit/
+  config.toml          Streamlit theme and server settings
+requirements.txt       Python dependencies
+render.yaml            Render Python Blueprint
+.env.example           Local configuration template
+```
+
+## Screenshots
+
+Suggested captures for `docs/screenshots/`:
+
+| Filename | Capture |
+| --- | --- |
+| `welcome-desktop.png` | Welcome screen with Ani and editable prompts |
+| `shortlist-desktop.png` | Product cards, recommendation, and simple explanation |
+| `shortlist-mobile.png` | Same shortlist on a phone-sized screen |
+| `dark-mode.png` | Chat and product cards in dark mode |
+
+Embed a saved screenshot with, for example:
+
+```markdown
+![SmartShop AI product shortlist on mobile](docs/screenshots/shortlist-mobile.png)
 ```
 
 ## Configuration
 
 | Variable | Required | Default | Purpose |
 | --- | --- | --- | --- |
-| `GROQ_API_KEY` | Yes | — | Secret credential used by the server to call Groq. |
-| `GROQ_MODEL` | No | `openai/gpt-oss-120b` | Groq model used for chat and product research. |
-| `GROQ_MAX_COMPLETION_TOKENS` | No | `900` | Response token budget; the server caps this setting at 1,200. |
-| `PORT` | No | `3000` locally | HTTP port. The hosting platform supplies its own port in production. |
+| `GROQ_API_KEY` | Yes | — | Secret credential used by the server for Groq requests. |
+| `GROQ_MODEL` | No | `openai/gpt-oss-120b` | Model used for the assistant and product research. |
+| `GROQ_MAX_COMPLETION_TOKENS` | No | `900` | Response token limit, capped at 1,200. |
 
-The app defaults to India and INR. For example, `30k` is interpreted as ₹30,000 unless the user specifies a different market or currency.
+## Limitations and troubleshooting
 
-## Deploy on Render
-
-The repository includes [`render.yaml`](render.yaml), which defines the Node web service, its start command, health check, and production settings. The `GROQ_API_KEY` value is requested as a Render secret rather than stored in the repository.
-
-1. Push the project to GitHub and connect that repository to Render.
-2. In Render, create a **Blueprint** from the repository and select the `main` branch.
-3. When prompted, enter the Groq key for `GROQ_API_KEY` in Render's secret field. Do not add it to GitHub or `render.yaml`.
-4. Apply the Blueprint and wait for the service's deploy to show **Live**.
-5. Open the service's `onrender.com` URL. Its health endpoint is `<your-render-url>/health`.
-
-Render is connected to the `main` branch. New commits pushed to that branch should deploy automatically unless auto-deploy has been disabled in the Render dashboard. To update the app after editing locally:
-
-```powershell
-git add -A
-git commit -m "Describe the change"
-git push origin main
-```
-
-After pushing, check **Deploys** in the Render dashboard and wait for the newest commit to become **Live**. If you edit a file directly on GitHub, commit the change to `main` to trigger the deploy. Changes to `render.yaml` update the Blueprint configuration; review any configuration or cost changes Render shows before applying them.
-
-The current Blueprint uses Render's free web-service plan. Free services sleep after 15 minutes without traffic and can take about a minute to wake on the next visit. This is suitable for demos and student projects, but not for apps that need uninterrupted availability. See [Render's free service limits](https://render.com/docs/free).
-
-## Project structure
-
-```text
-public/
-  index.html       Accessible app structure and page content
-  css/
-    base.css       Layout, shared components, and design tokens
-    chat.css       Welcome screen, messages, cards, and responsive styles
-    theme.css      Dark theme overrides
-  js/
-    app.js         Chat interactions, request handling, and Markdown rendering
-src/
-  groq.js          Ani's instructions, request validation, and Groq API client
-server.js          Static file server, chat API, security headers, and health check
-render.yaml        Render Blueprint for deployment
-.env.example       Local environment variable template
-```
-
-## Safety and limitations
-
-- Keep `GROQ_API_KEY` in `.env` locally and in Render's environment settings in production.
-- The server limits message size, chat history, and request frequency. It also applies same-origin checks and security headers.
-- Product research and prices depend on external search results and retailer pages. Source availability and accuracy can vary; verify details before purchase.
-- Render's free service can sleep when idle. Chat history is not saved between page sessions.
-
-## Troubleshooting
-
-- **Ani says the server is missing a key:** set `GROQ_API_KEY` in local `.env`, or in the Render service's environment settings, then restart or redeploy.
-- **Ani cannot reach Groq:** check the Render service logs and confirm that the Groq key is valid and the configured model is available to the key.
-- **The first page load is slow after a break:** the free Render service may be waking from sleep. Wait for it to start, then reload.
-- **The app does not show your latest code:** check that the changes were committed to `main`, pushed to GitHub, and the latest Render deploy is marked **Live**.
+- **Missing API key:** set `GROQ_API_KEY` in local `.env` or the Render service's environment settings.
+- **Groq request fails:** check the Render logs, key validity, model access, and Groq rate limits.
+- **First visit is slow:** the free Render service may be waking from sleep.
+- **Chat history:** conversation state is temporary and is not saved after the session ends.
+- **Research:** search coverage varies; verify product details and prices in the source links.
 
 ## Credits
 
-Created by **Anish Tamboli** as a student project. Ani is the shopping assistant persona; SmartShop AI is the app.
+Created by **Anish Tamboli** as a student project. Ani is the assistant persona; SmartShop AI is the app.
