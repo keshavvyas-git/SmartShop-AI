@@ -14,6 +14,21 @@ import streamlit as st
 API_URL = "https://api.groq.com/openai/v1/chat/completions"
 MAX_HISTORY_MESSAGES = 6
 MAX_MESSAGE_LENGTH = 1400
+TRUSTED_SOURCE_DOMAINS = {
+    # Official product makers and component vendors.
+    "acer.com", "amd.com", "apple.com", "asus.com", "canon-europe.com",
+    "dell.com", "hp.com", "intel.com", "lenovo.com", "lg.com", "logitech.com",
+    "microsoft.com", "mi.com", "motorola.com", "nvidia.com", "oneplus.com",
+    "oppo.com", "realme.com", "samsung.com", "sony.com", "vivo.com", "xiaomi.com",
+    # Established independent review publications.
+    "cnet.com", "consumerreports.org", "digitaltrends.com", "gsmarena.com",
+    "nytimes.com", "notebookcheck.net", "pcmag.com", "rtings.com", "techradar.com",
+    "theverge.com", "tomsguide.com", "trustedreviews.com", "wired.com",
+    # Direct listings from established Indian retailers.
+    "croma.com", "flipkart.com", "reliancedigital.in", "tatacliq.com", "vijaysales.com",
+}
+MARKDOWN_LINK = re.compile(r"\[([^\]]+)\]\((https?://[^\s)]+)\)")
+PLAIN_URL = re.compile(r"https?://[^\s)\]>]+", re.IGNORECASE)
 
 SYSTEM_PROMPT = """You are Ani, a concise shopping assistant. Help with shopping, product discovery, comparisons, buying advice, and questions that directly help someone choose or use a product. Politely decline unrelated requests in one short sentence and invite a shopping question.
 
@@ -77,14 +92,45 @@ def _collect_sources(message: dict[str, Any]) -> list[dict[str, str]]:
             title = result.get("title", "Source")
             if not isinstance(url, str) or not isinstance(title, str):
                 continue
-            parsed = urlparse(url)
-            if parsed.scheme != "https" or not parsed.netloc or url in seen:
+            if not _is_trusted_url(url) or url in seen:
                 continue
             seen.add(url)
             found.append({"title": title.strip()[:180] or "Source", "url": url})
             if len(found) >= 15:
                 return found
     return found
+
+
+def _is_trusted_url(url: str) -> bool:
+    """Allow HTTPS links from explicitly trusted source domains only."""
+    if len(url) > 2048:
+        return False
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+    except ValueError:
+        return False
+    if parsed.scheme != "https" or not hostname or parsed.username or parsed.password:
+        return False
+    hostname = hostname.lower().rstrip(".")
+    if hostname.endswith((".gov", ".gov.in", ".nic.in", ".edu")):
+        return True
+    return any(
+        hostname == domain or hostname.endswith(f".{domain}")
+        for domain in TRUSTED_SOURCE_DOMAINS
+    )
+
+
+def _clean_answer_links(answer: str) -> str:
+    """Remove unsupported links from generated Markdown before rendering."""
+    answer = MARKDOWN_LINK.sub(
+        lambda match: match.group(0) if _is_trusted_url(match.group(2)) else match.group(1),
+        answer,
+    )
+    return PLAIN_URL.sub(
+        lambda match: match.group(0) if _is_trusted_url(match.group(0)) else "",
+        answer,
+    )
 
 
 def get_assistant_reply(history: list[dict[str, Any]]) -> dict[str, Any]:
@@ -127,13 +173,15 @@ def get_assistant_reply(history: list[dict[str, Any]]) -> dict[str, Any]:
             data = {}
         if response.ok:
             choices = data.get("choices", []) if isinstance(data, dict) else []
-            message = choices[0].get("message", {}) if choices and isinstance(choices[0], dict) else {}
+            first_choice = choices[0] if isinstance(choices, list) and choices else {}
+            raw_message = first_choice.get("message", {}) if isinstance(first_choice, dict) else {}
+            message = raw_message if isinstance(raw_message, dict) else {}
             answer = message.get("content")
             if isinstance(answer, str) and answer.strip():
                 clean_answer = re.sub(
                     r"\s*(?:[【〖]\s*\d+\s*†\s*(?:L[\d–-]+|source)\s*[】〗]|\[\s*\d+\s*†\s*L[\d–-]+\s*\])",
                     "",
-                    answer.strip(),
+                    _clean_answer_links(answer.strip()),
                     flags=re.IGNORECASE,
                 )
                 return {"answer": clean_answer, "sources": _collect_sources(message)}

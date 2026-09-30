@@ -11,6 +11,7 @@ SmartShop AI is a responsive, Streamlit shopping assistant featuring **Ani**. De
 - Compares up to three products, then explains one recommendation in simple language.
 - Prefers trusted sources: manufacturers, established testing publications, government/standards sources, and well-known authorized retailers.
 - Keeps the API key on the server and out of the browser.
+- Limits each active chat session to 12 AI requests per 10 minutes to reduce accidental API overuse.
 - Offers editable prompt suggestions, per-session chat history, and light/dark themes.
 - Uses the original sunflower palette and animated Ani mascot, with a responsive layout.
 

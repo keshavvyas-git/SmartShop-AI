@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
+from time import monotonic
 
 import streamlit as st
 from dotenv import load_dotenv
@@ -43,7 +44,13 @@ SUGGESTIONS = [
 
 
 def init_state() -> None:
-    defaults = {"messages": [], "theme": "light", "chat_input": ""}
+    defaults = {
+        "messages": [],
+        "theme": "light",
+        "composer_input": "",
+        "pending_message": "",
+        "request_timestamps": [],
+    }
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
@@ -95,10 +102,16 @@ def show_welcome() -> None:
 
 def fill_suggestion(prompt: str) -> None:
     """Put a suggestion in the composer; the user still chooses when to send."""
-    st.session_state.chat_input = prompt
+    st.session_state.composer_input = prompt
 
 
-def render_product_table(answer: str) -> None:
+def queue_message() -> None:
+    """Queue the composer text and clear it before the app reruns."""
+    st.session_state.pending_message = st.session_state.composer_input.strip()
+    st.session_state.composer_input = ""
+
+
+def render_product_table(answer: str, key_prefix: str) -> None:
     """Render a Markdown product comparison as readable, phone-friendly cards."""
     lines = answer.splitlines()
     header_index = next(
@@ -115,7 +128,8 @@ def render_product_table(answer: str) -> None:
         None,
     )
     if header_index is None:
-        st.markdown(answer, unsafe_allow_html=False)
+        if not render_heading_products(answer, key_prefix):
+            st.markdown(answer, unsafe_allow_html=False)
         return
 
     def cells(line: str) -> list[str]:
@@ -137,7 +151,7 @@ def render_product_table(answer: str) -> None:
 
     for number, row in enumerate(rows, start=1):
         row += [""] * (len(header) - len(row))
-        with st.container(border=True, key=f"product_{number}"):
+        with st.container(border=True, key=f"{key_prefix}_product_{number}"):
             st.markdown(f"### {number:02d} · {row[0] or 'Product'}")
             if len(row) > 1 and row[1].strip():
                 st.markdown(f"**Approx. price**  \n{row[1]}")
@@ -146,15 +160,132 @@ def render_product_table(answer: str) -> None:
                     st.markdown(f"**{label.strip()}**  \n{value}")
 
     if after:
-        render_follow_up(after)
+        render_follow_up(after, key_prefix)
 
 
-def render_follow_up(text: str) -> None:
+def _heading_title(line: str) -> str | None:
+    match = re.match(r"^\s*#{2,3}\s+(.+?)\s*$", line)
+    return match.group(1) if match else None
+
+
+def _product_field(line: str) -> tuple[str | None, str]:
+    """Read a bold product label and any value placed on the same line."""
+    match = re.match(r"^\s*\*\*(.+?)\*\*(.*)$", line.strip())
+    if not match:
+        return None, ""
+
+    label = match.group(1).strip().rstrip("*:").strip().lower()
+    remainder = match.group(2).strip().lstrip("*").strip()
+    remainder = re.sub(r"^[:–—-]\s*", "", remainder)
+    if re.fullmatch(r"(?:approx(?:imate)?\.?\s*)?price", label):
+        return "price", remainder
+    if re.match(r"^(?:why it fits|why it works|good for|best for)", label):
+        return "fit", remainder
+    if re.match(r"^(?:main\s+)?trade[- ]?off|^(?:watch out|downside)", label):
+        return "tradeoff", remainder
+    return None, ""
+
+
+def _product_list_boundary(line: str) -> bool:
+    return bool(
+        re.match(
+            r"(?i)^\s*(?:\*\*(?:final\s+)?recommendation\s*:?\*\*|"
+            r"\*\*(?:in\s+simple\s+terms|plain\s+english)\s*:?\*\*|"
+            r"\*?prices?\s+(?:may|can|vary|are)\b)",
+            line,
+        )
+    )
+
+
+def render_heading_products(answer: str, key_prefix: str) -> bool:
+    """Handle older heading-and-label answers as cards when no table is returned."""
+    lines = answer.splitlines()
+    heading_positions = [
+        index for index, line in enumerate(lines) if _heading_title(line) is not None
+    ]
+    sections = []
+    for heading_index, start in enumerate(heading_positions):
+        end = heading_positions[heading_index + 1] if heading_index + 1 < len(heading_positions) else len(lines)
+        body_end = next(
+            (index for index in range(start + 1, end) if _product_list_boundary(lines[index])),
+            end,
+        )
+        section_lines = lines[start + 1 : body_end]
+        labels = {_product_field(line)[0] for line in section_lines}
+        is_product = "price" in labels and bool({"fit", "tradeoff"} & labels)
+        sections.append((start, body_end, _heading_title(lines[start]), section_lines, is_product))
+
+    products = [section for section in sections if section[4]]
+    if not products:
+        return False
+
+    rendered_through = 0
+    for product_number, (start, end, title, section_lines, _) in enumerate(products, start=1):
+        between = "\n".join(lines[rendered_through:start]).strip()
+        if between:
+            st.markdown(between, unsafe_allow_html=False)
+
+        subtitle = ""
+        values: dict[str, str] = {}
+        extras = []
+        index = 0
+        while index < len(section_lines):
+            current = section_lines[index].strip()
+            if not current:
+                index += 1
+                continue
+
+            field, inline_value = _product_field(current)
+            if field:
+                value_lines = [inline_value] if inline_value else []
+                index += 1
+                while index < len(section_lines) and not section_lines[index].strip():
+                    index += 1
+                while index < len(section_lines):
+                    candidate = section_lines[index].strip()
+                    if not candidate or _product_field(candidate)[0]:
+                        break
+                    value_lines.append(candidate)
+                    index += 1
+                values[field] = "\n".join(value_lines).strip()
+                continue
+
+            if not subtitle and current.startswith("**"):
+                subtitle = current
+            else:
+                extras.append(current)
+            index += 1
+
+        with st.container(border=True, key=f"{key_prefix}_heading_product_{product_number}"):
+            st.markdown(f"### {product_number:02d} · {title}")
+            if subtitle:
+                st.markdown(subtitle)
+            if values.get("price"):
+                st.markdown(f"**Approx. price**  \n{values['price']}")
+            detail_labels = {"fit": "Why it fits", "tradeoff": "Main trade-off"}
+            for field, label in detail_labels.items():
+                if values.get(field):
+                    st.markdown(f"**{label}**  \n{values[field]}")
+            for extra in extras:
+                st.markdown(extra, unsafe_allow_html=False)
+        rendered_through = end
+
+    after = "\n".join(lines[rendered_through:]).strip()
+    if after:
+        render_follow_up(after, key_prefix)
+    return True
+
+
+def render_follow_up(text: str, key_prefix: str) -> None:
     """Give the recommendation and plain-language summary their own visual blocks."""
     recommendation = re.search(
-        r"(?im)^\s*\*\*(?:final\s+)?recommendation\s*\*\*\s*[:–—-]?\s*", text
+        r"(?im)^\s*\*\*(?:final\s+)?recommendation\s*:?\s*\*\*\s*[:–—-]?\s*",
+        text,
     )
-    plain = re.search(r"(?im)^\s*\*\*(?:in\s+simple\s+terms|plain\s+english)\s*\*\*\s*:?\s*", text)
+    plain = re.search(
+        r"(?im)^\s*\*\*(?:in\s+simple\s+terms|plain\s+english)\s*:?\s*\*\*\s*:?\s*",
+        text,
+    )
     cuts = sorted([match.start() for match in (recommendation, plain) if match])
     if not cuts:
         st.markdown(text, unsafe_allow_html=False)
@@ -169,22 +300,23 @@ def render_follow_up(text: str) -> None:
         next_cut = min((position for position in cuts if position > match.start()), default=len(text))
         content = text[match.end() : next_cut].strip()
         label = "Ani’s recommendation" if kind == "recommendation" else "In simple terms"
-        with st.container(border=True, key=f"answer_{kind}"):
+        with st.container(border=True, key=f"{key_prefix}_answer_{kind}"):
             st.markdown(f"**{label}**")
             st.markdown(content, unsafe_allow_html=False)
 
 
-def render_message(message: dict[str, object]) -> None:
+def render_message(message: dict[str, object], message_index: int) -> None:
     role = str(message.get("role", "assistant"))
-    avatar = "account_circle" if role == "user" else "✳"
+    key_prefix = f"history_{message_index}"
+    avatar = ":material/account_circle:" if role == "user" else "✳"
     with st.chat_message(role, avatar=avatar):
         content = str(message.get("content", ""))
         if role == "assistant":
-            render_product_table(content)
+            render_product_table(content, key_prefix)
             sources = message.get("sources", [])
             if isinstance(sources, list) and sources:
                 with st.expander("Research links", icon=":material/link:"):
-                    for source in sources:
+                    for source_index, source in enumerate(sources):
                         source_url = source.get("url", "") if isinstance(source, dict) else ""
                         if isinstance(source_url, str) and source_url.startswith("https://"):
                             st.link_button(
@@ -192,6 +324,7 @@ def render_message(message: dict[str, object]) -> None:
                                 source_url,
                                 icon=":material/open_in_new:",
                                 width="stretch",
+                                key=f"{key_prefix}_source_{source_index}",
                             )
         else:
             st.markdown(content)
@@ -199,6 +332,23 @@ def render_message(message: dict[str, object]) -> None:
 
 def set_theme(theme: str) -> None:
     st.session_state.theme = theme
+
+
+def request_retry_after() -> int:
+    """Enforce a soft 12-request quota per visitor session over ten minutes."""
+    now = monotonic()
+    recent = [
+        timestamp
+        for timestamp in st.session_state.request_timestamps
+        if now - timestamp < 600
+    ]
+    if len(recent) >= 12:
+        st.session_state.request_timestamps = recent
+        return max(1, int(600 - (now - recent[0]) + 0.999))
+
+    recent.append(now)
+    st.session_state.request_timestamps = recent
+    return 0
 
 
 st.set_page_config(
@@ -234,50 +384,82 @@ with theme_column:
 if not st.session_state.messages:
     show_welcome()
 else:
-    for item in st.session_state.messages:
-        render_message(item)
+    for message_index, item in enumerate(st.session_state.messages):
+        render_message(item, message_index)
 
-st.markdown(
-    '<div class="composer-hint">Pick an idea to edit it before sending · Check prices and availability before you buy</div>',
-    unsafe_allow_html=True,
-)
-prompt = st.chat_input(
-    "Tell Ani what you’re shopping for…",
-    key="chat_input",
-    max_chars=1400,
-    submit_mode="disable",
-)
+with st.container(key="composer"):
+    st.markdown(
+        '<div class="composer-hint">Pick an idea to edit it before sending · Check prices and availability before you buy</div>',
+        unsafe_allow_html=True,
+    )
+    input_column, send_column = st.columns([12, 1], vertical_alignment="bottom", gap="small")
+    with input_column:
+        st.text_area(
+            "Message Ani",
+            placeholder="Tell Ani what you’re shopping for…",
+            key="composer_input",
+            max_chars=1400,
+            height=82,
+            label_visibility="collapsed",
+        )
+    with send_column:
+        st.button(
+            ":material/arrow_upward:",
+            key="send_message",
+            help="Send message to Ani",
+            type="primary",
+            width="stretch",
+            on_click=queue_message,
+        )
+
+prompt = st.session_state.pop("pending_message", "")
 
 if prompt and prompt.strip():
     user_message = {"role": "user", "content": prompt.strip()}
     st.session_state.messages.append(user_message)
-    with st.chat_message("user", avatar="account_circle"):
+    with st.chat_message("user", avatar=":material/account_circle:"):
         st.markdown(user_message["content"])
 
     with st.chat_message("assistant", avatar="✳"):
-        with st.status(":shimmer[Searching trusted product sources]", type="compact"):
-            assistant_message = None
-            try:
-                result = get_assistant_reply(st.session_state.messages[-6:])
-            except AssistantError as error:
-                st.error(str(error))
-                st.session_state.messages.append(
-                    {"role": "assistant", "content": str(error), "sources": []}
-                )
-            else:
-                assistant_message = {
-                    "role": "assistant",
-                    "content": result["answer"],
-                    "sources": result["sources"],
-                }
-                st.session_state.messages.append(assistant_message)
-        if assistant_message:
-            render_product_table(assistant_message["content"])
-            if assistant_message["sources"]:
-                with st.expander("Research links", icon=":material/link:"):
-                    for source in assistant_message["sources"]:
-                        st.link_button(
-                            source["title"], source["url"],
-                            icon=":material/open_in_new:", width="stretch"
-                        )
+        new_message_key = f"new_{len(st.session_state.messages)}"
+        wait_seconds = request_retry_after()
+        if wait_seconds:
+            wait_minutes = max(1, (wait_seconds + 59) // 60)
+            error_message = (
+                f"Ani has reached the short-term request limit for this connection. "
+                f"Please wait about {wait_minutes} minute(s) and try again."
+            )
+            st.warning(error_message)
+            st.session_state.messages.append(
+                {"role": "assistant", "content": error_message, "sources": []}
+            )
+        else:
+            with st.status(":shimmer[Searching trusted product sources]", type="compact"):
+                assistant_message = None
+                try:
+                    result = get_assistant_reply(st.session_state.messages[-6:])
+                except AssistantError as error:
+                    st.error(str(error))
+                    st.session_state.messages.append(
+                        {"role": "assistant", "content": str(error), "sources": []}
+                    )
+                else:
+                    assistant_message = {
+                        "role": "assistant",
+                        "content": result["answer"],
+                        "sources": result["sources"],
+                    }
+                    st.session_state.messages.append(assistant_message)
+            if assistant_message:
+                render_product_table(assistant_message["content"], new_message_key)
+                if assistant_message["sources"]:
+                    with st.expander("Research links", icon=":material/link:"):
+                        for source_index, source in enumerate(assistant_message["sources"]):
+                            st.link_button(
+                                source["title"],
+                                source["url"],
+                                icon=":material/open_in_new:",
+                                width="stretch",
+                                key=f"{new_message_key}_source_{source_index}",
+                            )
 
